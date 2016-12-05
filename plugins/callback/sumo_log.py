@@ -17,38 +17,93 @@
 from __future__ import (absolute_import, division, print_function)
 __metaclass__ = type
 
-import sys
-reload(sys)
-sys.setdefaultencoding('utf-8')
+import os
+import json
+import logging
+import time
 
+#import sys
+#reload(sys)
+#sys.setdefaultencoding('utf-8')
+
+from ansible.module_utils._text import to_bytes
+from ansible.plugins.callback import CallbackBase
+
+'''
 try:
     import simplejson as json
 except ImportError:
     import json
+'''
+
+#logfile = '/Users/dgadoury/github/ansible-to-sumo/ansible.log'
+
+log = logging.getLogger('ansible')
+#fh = logging.FileHandler('/Users/dgadoury/github/ansible-to-sumo/ansible.log')
+#logger.addHandler(fh)
+
+#log = logging.basicConfig(filename=logfile)
 
 # Fields to reformat output for
 FIELDS = ['cmd', 'command', 'start', 'end', 'delta', 'msg', 'stdout',
           'stderr', 'results']
 
 
-class CallbackModule(object):
+class CallbackModule(CallbackBase):
 
     """
-    Ansible callback plugin for human-readable result logging
+    Ansible callback plugin for human-readable result logging for log aggregators
     """
     CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = 'notification'
     CALLBACK_NAME = 'human_log'
-    CALLBACK_NEEDS_WHITELIST = False
+    #CALLBACK_NEEDS_WHITELIST = False
+    CALLBACK_NEEDS_WHITELIST = True 
 
-    def human_log(self, data):
+    TIME_FORMAT = "%b %d %Y %H:%M%:%S"
+    MSG_FORMAT = "- %host(s) - %(data)s\n\n"
+    #MSG_FORMAT = "%(now)s - %(host)s - %(data)s\n\n"
+    MSG_FORMAT_NO_HOST = "%(data)s"
+    #MSG_FORMAT_NO_HOST = "%(now)s - %(data)s\n\n"
+    #MSG_FORMAT="%(now)s - %(category)s - %(data)s\n\n"
+
+    def __init__(self):
+
+        super(CallbackModule, self).__init__()
+    '''
+    def log(self, data):
         if type(data) == dict:
             for field in FIELDS:
                 no_log = data.get('_ansible_no_log')
                 if field in data.keys() and data[field] and no_log != True:
                     output = self._format_output(data[field])
-                    print("\n{0}: {1}".format(field, output.replace("\\n","\n")))
+                    print("\n{0}: {1}".format(field, output.replace("\\n","boogers\n")))
+    '''
 
+    def log(self, data, host=None):
+    #def log(self, host, category, data):
+        if type(data) == dict:
+            if '_ansible_verbose_override' in data:
+                # avoid logging exteranous data
+                data = 'omitted'
+            else:
+                data = data.copy()
+                invocation = data.pop('invocation', None)
+                data = json.dumps(data)
+                if invocation is not None:
+                    data = json.dumps(invocation) + " => %s " % data
+
+        now = time.strftime(self.TIME_FORMAT, time.localtime())
+        
+        if host is None:
+            msg = to_bytes(self.MSG_FORMAT_NO_HOST % dict(data=data))
+        else:
+            msg = to_bytes(self.MSG_FORMAT % dict(host=host, data=data))
+        #msg = to_bytes(self.MSG_FORMAT % dict(now=now, category=category, data=data))
+
+        log.info(msg)
+
+    '''
     def _format_output(self, output):
         # Strip unicode
         if type(output) == unicode:
@@ -92,33 +147,35 @@ class CallbackModule(object):
 
         # Otherwise it's a string, (or an int, float, etc.) just return it
         return str(output)
+        '''
+
 
     def on_any(self, *args, **kwargs):
         pass
 
     def runner_on_failed(self, host, res, ignore_errors=False):
-        self.human_log(res)
+        self.log(res, host)
 
     def runner_on_ok(self, host, res):
-        self.human_log(res)
+        self.log(res, host)
 
     def runner_on_skipped(self, host, item=None):
         pass
 
     def runner_on_unreachable(self, host, res):
-        self.human_log(res)
+        self.log(res, host)
 
     def runner_on_no_hosts(self):
         pass
 
     def runner_on_async_poll(self, host, res, jid, clock):
-        self.human_log(res)
+        self.log(res, host)
 
     def runner_on_async_ok(self, host, res, jid):
-        self.human_log(res)
+        self.log(res, host)
 
     def runner_on_async_failed(self, host, res, jid):
-        self.human_log(res)
+        self.log(res, host)
 
     def playbook_on_start(self):
         pass
@@ -162,33 +219,36 @@ class CallbackModule(object):
         pass
 
     def v2_runner_on_failed(self, result, ignore_errors=False):
-        self.human_log(result._result)
+        self.log(result._result)
 
     def v2_runner_on_ok(self, result):
-        self.human_log(result._result)
+        self.log(result._result)
 
     def v2_runner_on_skipped(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_runner_on_unreachable(self, result):
-        self.human_log(result._result)
+        self.log(result._result)
 
     def v2_runner_on_no_hosts(self, task):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_runner_on_async_poll(self, result):
-        self.human_log(result._result)
+        self.log(result._result)
 
     def v2_runner_on_async_ok(self, host, result):
-        self.human_log(result._result)
+        self.log(result._result, host)
 
     def v2_runner_on_async_failed(self, result):
-        self.human_log(result._result)
+        self.log(result._result)
 
     def v2_playbook_on_start(self, playbook):
         pass
 
     def v2_playbook_on_notify(self, result, handler):
+        self.log(result._result)
         pass
 
     def v2_playbook_on_no_hosts_matched(self):
@@ -221,25 +281,32 @@ class CallbackModule(object):
         pass
 
     def v2_on_file_diff(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_playbook_on_item_ok(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_playbook_on_item_failed(self, result):
-        pass
+        iself.log(result._result)
+        #pass
 
     def v2_playbook_on_item_skipped(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_playbook_on_include(self, included_file):
         pass
 
     def v2_playbook_item_on_ok(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_playbook_item_on_failed(self, result):
-        pass
+        self.log(result._result)
+        #pass
 
     def v2_playbook_item_on_skipped(self, result):
-        pass
+        self.log(result._result)
+        #pass
