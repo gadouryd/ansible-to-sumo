@@ -50,8 +50,12 @@ class CallbackModule(CallbackBase):
 
         super(CallbackModule, self).__init__()
 
+        '''
         if not os.path.exists("/var/log/ansible/hosts"):
             os.makedirs("/var/log/ansible/hosts")
+        '''
+        if not os.path.exists("~/var/log/ansible/hosts"):
+            os.makedirs("~/var/log/ansible/hosts")
 
     def log(self, host, category, data):
         if type(data) == dict:
